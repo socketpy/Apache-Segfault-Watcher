@@ -17,6 +17,7 @@
 # Version: 2013-03-01, js: creation
 #          2013-03-01, js: development
 #          2013-03-05, js: development
+#          2014-07-03, js: development
 #
 ##########################################################################################
 
@@ -37,6 +38,7 @@ TEXT_TO_WATCH="exit signal Segmentation fault"
 HOSTNAME=$(hostname)
 MAIL_ADDRESS="email_address@example.com"
 MAIL_SUBJECT=${HOSTNAME}": Apache Segfault Notification"
+SEND_MAIL_NOTIFICATION=true
 
 SCRIPT_NAME=$(basename "$0")
 SCRIPT_BASE_NAME=${SCRIPT_NAME%.*}
@@ -84,7 +86,9 @@ if mkdir ${LOCK_DIR} 2>/dev/null; then
     fi
 
     # Send e-mail notification.
-    echo ${LOG_MESSAGE}$'\n\r'${FAIL_COUNT} | mail -s "${MAIL_SUBJECT}" ${MAIL_ADDRESS}
+    if ${SEND_MAIL_NOTIFICATION}; then
+      echo ${LOG_MESSAGE}$'\n\r'${FAIL_COUNT} | mail -s "${MAIL_SUBJECT}" ${MAIL_ADDRESS}
+    fi
 
     # Restart Apache
     ${APACHE_RESTART}
