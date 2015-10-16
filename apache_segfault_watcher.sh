@@ -16,15 +16,21 @@
 # Created: 2013-03-01, js
 # Version: 2013-03-01, js: creation
 #          2013-03-01, js: development
+#          2013-03-05, js: development
 #
 ##########################################################################################
 
-LOCK_NAME="APACHE_SEGFAULT_WATCH"
+LOCK_NAME="APACHE_SEGFAULT_WATCHER"
 LOCK_DIR=/tmp/${LOCK_NAME}.lock
 PID_FILE=${LOCK_DIR}/${LOCK_NAME}.pid
 
+DATE=`date +%Y%m%d`
+TIME=`date +%H%M`
+# SUFFIX="-"${DATE}"-"${TIME};
+SUFFIX="-"${DATE};
+
 APACHE_ERROR_LOG="/var/log/apache2/error.log"
-APACHE_RESTART="/etc/init.d/apache2 restart"
+APACHE_RESTART="/etc/init.d/apache2 graceful"
 TEXT_TO_WATCH="exit signal Segmentation fault"
 # TEXT_TO_WATCH="File does not exist"
 
@@ -32,38 +38,57 @@ HOSTNAME=$(hostname)
 MAIL_ADDRESS="email_address@example.com"
 MAIL_SUBJECT=${HOSTNAME}": Apache Segfault Notification"
 
-SCRIPT_NAME=$(basename ${0})
+SCRIPT_NAME=$(basename "$0")
 SCRIPT_BASE_NAME=${SCRIPT_NAME%.*}
 
+# LOG_DIR="/opt/segfault_logs/"
+# LOG_FILENAME=${SCRIPT_BASE_NAME}${SUFFIX}".log"
 LOG_DIR="/var/log/apache2/"
 LOG_FILENAME=${SCRIPT_BASE_NAME}".log"
 LOG_FULLPATH=${LOG_DIR}${LOG_FILENAME}
 
+TAIL_NUMLINES=5
+FAIL_COUNT=4
+
+# Overrides for tests.
+# APACHE_ERROR_LOG="/Users/jack/Desktop/apache_test.log"
+# LOG_DIR="/Users/jack/Desktop/"
+# LOG_FILENAME=${SCRIPT_BASE_NAME}".log"
+# LOG_FULLPATH=${LOG_DIR}${LOG_FILENAME}
+
+# If the Apache log file doesn't exist, then exit.
+if [ ! -f ${APACHE_ERROR_LOG} ]; then
+  exit
+fi
+
+# Main process.
 if mkdir ${LOCK_DIR} 2>/dev/null; then
   # If the ${LOCK_DIR} doesn't exist, then start working & store the ${PID_FILE}
   echo $$ > ${PID_FILE}
 
-  while true; do
-    LOOP_MESSAGE="`date` (re)starting control loop"
-    echo ${LOOP_MESSAGE} >> ${LOG_FULLPATH}
-    tail --follow=name --retry -n 0 "$APACHE_ERROR_LOG" 2>/dev/null | while read LOG_LINE; do
-    if [[ `echo "$LOG_LINE" | egrep "$TEXT_TO_WATCH"` ]]; then
-      LOG_MESSAGE="`date` Segfault detected on "$HOSTNAME
+  STARTUP_MESSAGE="`date` Log watcher starting."
+  if [ -d ${LOG_DIR} ]; then
+    echo ${STARTUP_MESSAGE} >> ${LOG_FULLPATH}
+  fi
 
-      # Log the error to the file.
+  # Tail--but do not follow--a chunk of the LOG_FULLPATH if the number of instances is
+  # greater than or equal to the FAIL_COUNT, act
+  if [[ `tail -n ${TAIL_NUMLINES} "${APACHE_ERROR_LOG}" | egrep -c "${TEXT_TO_WATCH}"` -ge ${FAIL_COUNT} ]]; then
+
+    # Create the log message.
+    LOG_MESSAGE="`date` Segfault detected on "$HOSTNAME
+
+    # Log the error to the file.
+    if [ -d ${LOG_DIR} ]; then
       echo ${LOG_MESSAGE} >> ${LOG_FULLPATH}
-
-      # Send e-mail notification.
-      echo ${LOG_MESSAGE}$'\n\r'${LOG_LINE} | mail -s "${MAIL_SUBJECT}" ${MAIL_ADDRESS}
-
-      # Restart Apache
-      # ${APACHE_RESTART}
-
-      break
     fi
-    done
-  sleep 5
-  done
+
+    # Send e-mail notification.
+    echo ${LOG_MESSAGE}$'\n\r'${FAIL_COUNT} | mail -s "${MAIL_SUBJECT}" ${MAIL_ADDRESS}
+
+    # Restart Apache
+    ${APACHE_RESTART}
+  fi
 
   rm -rf ${LOCK_DIR}
   exit
